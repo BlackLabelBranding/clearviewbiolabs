@@ -1,0 +1,18 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export async function GET() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data, error } = await supabase
+    .from("clearview_orders")
+    .select("id,order_number,subtotal_cents,status,created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) return NextResponse.json({ error: "Orders unavailable" }, { status: 500 });
+  return NextResponse.json(data);
+}
