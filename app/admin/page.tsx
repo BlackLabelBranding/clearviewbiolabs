@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminDashboard } from "./AdminDashboard";
+import { InquiryNotifier } from "./InquiryNotifier";
 import { hasAdminPasscode } from "@/lib/admin";
 import { lockAdmin, unlockAdmin } from "./actions";
 
@@ -36,6 +37,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   return <main className="portal-shell admin-shell">
     <header className="portal-header"><Link className="brand" href="/"><span className="brand-symbol">CV</span><span>CLEAR VIEW<small>ADMIN</small></span></Link><div><span>Admin unlocked</span><form action={lockAdmin}><button type="submit">Lock admin</button></form></div></header>
     <section className="portal-hero"><p className="eyebrow">OPERATIONS</p><h1>Clear View control room.</h1><p>Manage inquiries, sales, analytics, orders, and the research catalog.</p></section>
+    <InquiryNotifier />
     <AdminDashboard />
   </main>;
 }
