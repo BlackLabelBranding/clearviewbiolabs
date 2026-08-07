@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Cormorant_Garamond } from "next/font/google";
+import { SiteAnalytics } from "./SiteAnalytics";
 import "./globals.css";
 
 const sans = Geist({ variable: "--font-sans", subsets: ["latin"] });
@@ -21,5 +22,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={`${sans.variable} ${serif.variable}`}>{children}</body></html>;
+  return <html lang="en"><body className={`${sans.variable} ${serif.variable}`}>{children}<SiteAnalytics /></body></html>;
 }
