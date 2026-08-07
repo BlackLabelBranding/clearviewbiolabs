@@ -50,5 +50,5 @@ export function SiteAnalytics() {
     };
   }, []);
 
-  return showContact ? <a className="contact-fab" href="/contact" aria-label="Contact Clear View Biolabs">Questions? Contact us</a> : null;
+  return showContact ? <a href="/contact" aria-label="Contact Clear View Biolabs" style={{ position: "fixed", right: 22, bottom: 22, zIndex: 45, background: "#c4a64b", color: "#10110f", textDecoration: "none", padding: "13px 16px", fontSize: 11, fontWeight: 700, boxShadow: "0 10px 30px #0003" }}>Questions? Contact us</a> : null;
 }
