@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
+import "./contact.css";
 
 export default function ContactPage() {
   const [researcher, setResearcher] = useState({ firstName: "", lastName: "", email: "", institution: "", institutionType: "" });
