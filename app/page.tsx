@@ -14,6 +14,8 @@ export default function Home() {
   const [gate, setGate] = useState({ firstName: "", lastName: "", email: "", institution: "", institutionType: "" });
   const [confirmResearch, setConfirmResearch] = useState(false);
   const [confirmAge, setConfirmAge] = useState(false);
+  const [consentError, setConsentError] = useState("");
+  const [savingConsent, setSavingConsent] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -26,16 +28,39 @@ export default function Home() {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  function enterSite(e: FormEvent) {
+  async function enterSite(e: FormEvent) {
     e.preventDefault();
-    if (!confirmResearch || !confirmAge) return;
-    sessionStorage.setItem("cvb-research-accepted", "yes");
-    sessionStorage.setItem("cvb-researcher", JSON.stringify(gate));
-    setAccepted(true);
+    if (!confirmResearch || !confirmAge || savingConsent) return;
+
+    setSavingConsent(true);
+    setConsentError("");
+
+    try {
+      const response = await fetch("/api/consent", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...gate,
+          researchConfirmed: confirmResearch,
+          ageConfirmed: confirmAge,
+          sourcePage: window.location.pathname,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Consent could not be recorded");
+
+      sessionStorage.setItem("cvb-research-accepted", "yes");
+      sessionStorage.setItem("cvb-researcher", JSON.stringify(gate));
+      setAccepted(true);
+    } catch {
+      setConsentError("We couldn't record your acknowledgment. Please try again.");
+    } finally {
+      setSavingConsent(false);
+    }
   }
 
   return <main>
-    {!accepted && <div className="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title"><form className="gate-card" onSubmit={enterSite}><div className="gate-mark">CV</div><p className="eyebrow">RESEARCH ACCESS</p><h2 id="gate-title">Important — read carefully before accessing this website.</h2><div className="disclaimer-copy">{disclaimer.split("\n\n").map((p) => <p key={p}>{p}</p>)}</div><div className="gate-grid"><label>First name<input required value={gate.firstName} onChange={(e) => setGate({ ...gate, firstName: e.target.value })} /></label><label>Last name<input required value={gate.lastName} onChange={(e) => setGate({ ...gate, lastName: e.target.value })} /></label><label>Email address<input required type="email" value={gate.email} onChange={(e) => setGate({ ...gate, email: e.target.value })} /></label><label>Institution / laboratory<input required value={gate.institution} onChange={(e) => setGate({ ...gate, institution: e.target.value })} /></label><label className="wide">Institution type<select required value={gate.institutionType} onChange={(e) => setGate({ ...gate, institutionType: e.target.value })}><option value="">Select institution type</option><option>Academic research</option><option>Commercial laboratory</option><option>Scientific research institution</option><option>Qualified independent researcher</option></select></label></div><label className="check"><input type="checkbox" checked={confirmResearch} onChange={(e) => setConfirmResearch(e.target.checked)} /> <span>I acknowledge that this website and all products are for lawful research purposes only.</span></label><label className="check"><input type="checkbox" checked={confirmAge} onChange={(e) => setConfirmAge(e.target.checked)} /> <span>I confirm that I am 21 years of age or older.</span></label><button className="gold-button" disabled={!confirmResearch || !confirmAge}>I Agree — Continue to Site</button></form></div>}
+    {!accepted && <div className="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title"><form className="gate-card" onSubmit={enterSite}><div className="gate-mark">CV</div><p className="eyebrow">RESEARCH ACCESS</p><h2 id="gate-title">Important — read carefully before accessing this website.</h2><div className="disclaimer-copy">{disclaimer.split("\n\n").map((p) => <p key={p}>{p}</p>)}</div><div className="gate-grid"><label>First name<input required value={gate.firstName} onChange={(e) => setGate({ ...gate, firstName: e.target.value })} /></label><label>Last name<input required value={gate.lastName} onChange={(e) => setGate({ ...gate, lastName: e.target.value })} /></label><label>Email address<input required type="email" value={gate.email} onChange={(e) => setGate({ ...gate, email: e.target.value })} /></label><label>Institution / laboratory<input required value={gate.institution} onChange={(e) => setGate({ ...gate, institution: e.target.value })} /></label><label className="wide">Institution type<select required value={gate.institutionType} onChange={(e) => setGate({ ...gate, institutionType: e.target.value })}><option value="">Select institution type</option><option>Academic research</option><option>Commercial laboratory</option><option>Scientific research institution</option><option>Qualified independent researcher</option></select></label></div><label className="check"><input type="checkbox" checked={confirmResearch} onChange={(e) => setConfirmResearch(e.target.checked)} /> <span>I acknowledge that this website and all products are for lawful research purposes only.</span></label><label className="check"><input type="checkbox" checked={confirmAge} onChange={(e) => setConfirmAge(e.target.checked)} /> <span>I confirm that I am 21 years of age or older.</span></label>{consentError && <p className="form-error">{consentError}</p>}<button className="gold-button" disabled={!confirmResearch || !confirmAge || savingConsent}>{savingConsent ? "Recording acknowledgment…" : "I Agree — Continue to Site"}</button></form></div>}
     <div className="research-bar">STRICTLY FOR LABORATORY RESEARCH • NOT FOR HUMAN OR ANIMAL USE</div>
     <header className="site-header"><a className="brand" href="/"><span className="brand-symbol">CV</span><span>CLEAR VIEW<small>BIOLABS</small></span></a><nav><a href="/catalog">Catalog</a><a href="/account">Account</a><a href="mailto:Marc@Clearviewbiolabs.com">Contact</a></nav><a className="cart-button" href="/catalog" aria-label="Open research catalog"><span>Research Order</span><b>→</b></a></header>
     <section className="hero" id="top"><div className="hero-copy"><p className="eyebrow">CLEAR VIEW BIOLABS</p><h1>Clarity in every<br /><em>research decision.</em></h1><p className="hero-lead">Purpose-built research materials, transparent selection, and a direct ordering experience for qualified laboratories and researchers.</p><div className="hero-actions"><a className="gold-button" href="/catalog">Explore the Catalog</a><a className="text-link" href="#standards">Our standards <span>→</span></a></div><div className="trust-row"><span>Research use only</span><span>Direct support</span><span>Secure order request</span></div></div><div className="hero-image"><Image src="/products/DSC04018.jpg" alt="Clear View Biolabs research vials arranged in a laboratory-inspired composition" fill sizes="(max-width: 760px) 100vw, 50vw" priority /><span className="image-note">QUALITY. TRANSPARENCY. CLEAR VIEW.</span></div></section>
