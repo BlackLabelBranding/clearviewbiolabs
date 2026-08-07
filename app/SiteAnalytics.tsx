@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
 
 export function SiteAnalytics() {
   const orderSeen = useRef(false);
+  const [showContact, setShowContact] = useState(false);
 
   useEffect(() => {
+    const privateRoute = ["/admin", "/login", "/account", "/auth"].some((prefix) => window.location.pathname.startsWith(prefix));
+    if (privateRoute) return;
+    setShowContact(window.location.pathname !== "/contact");
+
     const params = new URLSearchParams(window.location.search);
     trackEvent("page_view", {
       utm_source: params.get("utm_source") || "",
@@ -45,5 +50,5 @@ export function SiteAnalytics() {
     };
   }, []);
 
-  return <a className="contact-fab" href="/contact" aria-label="Contact Clear View Biolabs">Questions? Contact us</a>;
+  return showContact ? <a className="contact-fab" href="/contact" aria-label="Contact Clear View Biolabs">Questions? Contact us</a> : null;
 }
