@@ -16,7 +16,7 @@ export async function hasAdminPasscode() {
   return cookieStore.get(ADMIN_PASSCODE_COOKIE)?.value === currentAdminPasscode();
 }
 
-function createPasscodeAdminClient() {
+export function createPasscodeAdminClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
