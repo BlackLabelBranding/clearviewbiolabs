@@ -11,6 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("clearview_orders")
     .select("id,order_number,subtotal_cents,status,created_at")
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: "Orders unavailable" }, { status: 500 });

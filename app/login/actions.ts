@@ -1,37 +1,30 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { safeReturnPath } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
-export async function requestMagicLink(formData: FormData) {
+export async function signInWithPassword(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
   const next = safeReturnPath(String(formData.get("next") || "/account"));
-
-  if (!email || !email.includes("@")) {
-    redirect(`/login?next=${encodeURIComponent(next)}&error=invalid_email`);
-  }
-
-  const incoming = await headers();
-  const host = incoming.get("x-forwarded-host") || incoming.get("host");
-  const protocol = incoming.get("x-forwarded-proto") || "https";
-  const origin =
-    incoming.get("origin") ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (host ? `${protocol}://${host}` : "http://localhost:3000");
-
+  if (!email.includes("@") || password.length < 8) redirect(`/login?next=${encodeURIComponent(next)}&error=1`);
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
-    },
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) redirect(`/login?next=${encodeURIComponent(next)}&error=1`);
+  redirect(next);
+}
 
-  if (error) {
-    redirect(`/login?next=${encodeURIComponent(next)}&error=send_failed`);
-  }
-
-  redirect(`/login?sent=1&email=${encodeURIComponent(email)}&next=${encodeURIComponent(next)}`);
+export async function createAccount(formData: FormData) {
+  const firstName = String(formData.get("firstName") || "").trim();
+  const lastName = String(formData.get("lastName") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const next = safeReturnPath(String(formData.get("next") || "/account"));
+  if (!firstName || !lastName || !email.includes("@") || password.length < 8) redirect(`/login?next=${encodeURIComponent(next)}&error=1`);
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: `${firstName} ${lastName}` } } });
+  if (error) redirect(`/login?next=${encodeURIComponent(next)}&error=1`);
+  if (!data.session) redirect(`/login?next=${encodeURIComponent(next)}&created=1`);
+  redirect(next);
 }

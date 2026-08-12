@@ -18,6 +18,9 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     openGraph: { title: "Clear View Biolabs", description, images: [{ url: image, width: 1792, height: 937 }] },
     twitter: { card: "summary_large_image", title: "Clear View Biolabs", description, images: [image] },
+    manifest: "/manifest.webmanifest",
+    icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }], apple: "/icon-192.svg" },
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Clear View" },
   };
 }
 
