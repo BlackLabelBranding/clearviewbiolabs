@@ -50,6 +50,7 @@ export default function ContactPage() {
     <header className="portal-header"><Link className="brand" href="/"><span className="brand-symbol">CV</span><span>CLEAR VIEW<small>BIOLABS</small></span></Link><div><Link href="/">Back to catalog</Link></div></header>
     <section className="portal-hero"><p className="eyebrow">RESEARCH SUPPORT</p><h1>Talk with Clear View.</h1><p>Send a product question, availability request, or general inquiry. Your message is routed into the Clear View admin dashboard for follow-up.</p></section>
     <section className="portal-content">
+      <aside className="contact-details" aria-label="Clear View Biolabs contact information"><div><p className="eyebrow">DIRECT CONTACT</p><h2>Clear View Biolabs</h2></div><div><strong>Research disclaimer</strong><p>All products and information are provided strictly for lawful laboratory research. Not for human or animal use.</p></div><div><a href="mailto:Marc@Clearviewbiolabs.com">Marc@Clearviewbiolabs.com</a><a href="tel:8882712282">888-271-2282</a></div></aside>
       <form className="auth-card inquiry-form" onSubmit={submit}>
         <p className="eyebrow">NEW INQUIRY</p><h1>How can we help?</h1>
         {state === "sent" ? <div className="auth-note"><strong>Inquiry received.</strong><p>The Clear View team has your message and can follow up using the contact information you provided.</p><Link className="gold-button" href="/">Return to catalog</Link></div> : <div className="inquiry-grid">
