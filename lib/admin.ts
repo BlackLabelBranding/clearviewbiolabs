@@ -5,6 +5,8 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 export const ADMIN_PASSCODE_COOKIE = "cvb-admin-passcode";
 
 export function currentAdminPasscode() {
+  const configuredPasscode = process.env.CLEARVIEW_ADMIN_PASSCODE?.trim();
+  if (configuredPasscode) return configuredPasscode;
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     timeZone: "America/Chicago",
