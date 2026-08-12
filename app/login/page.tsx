@@ -1,47 +1,9 @@
 import Link from "next/link";
-import { requestMagicLink } from "./actions";
+import { createAccount, signInWithPassword } from "./actions";
 import { safeReturnPath } from "@/lib/auth";
-
-type LoginPageProps = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams;
   const next = safeReturnPath(typeof params.next === "string" ? params.next : "/account");
-  const sent = params.sent === "1";
-  const email = typeof params.email === "string" ? params.email : "your email";
-  const error = typeof params.error === "string";
-
-  return (
-    <main className="portal-shell auth-shell">
-      <header className="portal-header">
-        <Link className="brand" href="/">
-          <span className="brand-symbol">CV</span>
-          <span>CLEAR VIEW<small>BIOLABS</small></span>
-        </Link>
-      </header>
-      <section className="auth-card">
-        <p className="eyebrow">SECURE ACCOUNT ACCESS</p>
-        <h1>{sent ? "Check your inbox." : "Sign in without a password."}</h1>
-        {sent ? (
-          <>
-            <p>We sent a secure sign-in link to <strong>{email}</strong>.</p>
-            <p className="auth-note">Open that email on this device to continue. The link expires automatically.</p>
-          </>
-        ) : (
-          <>
-            <p>Enter your email and we’ll send a secure one-time link.</p>
-            {error && <p className="form-error">We couldn’t send that link. Check the email address and try again.</p>}
-            <form action={requestMagicLink} className="auth-form">
-              <input type="hidden" name="next" value={next} />
-              <label>Email address<input required type="email" name="email" autoComplete="email" /></label>
-              <button className="gold-button">Email My Sign-In Link</button>
-            </form>
-          </>
-        )}
-        <Link className="text-link" href="/">← Return to catalog</Link>
-      </section>
-    </main>
-  );
+  return <main className="portal-shell auth-shell"><header className="portal-header"><Link className="brand" href="/"><span className="brand-symbol">CV</span><span>CLEAR VIEW<small>BIOLABS</small></span></Link></header><section className="auth-card account-auth"><p className="eyebrow">CUSTOMER ACCOUNT</p><h1>Sign in.</h1><p>Use your Clear View email and password. Your account keeps previous research orders in one place.</p>{params.created === "1" && <p className="auth-note">Account created. Confirm your email, then sign in.</p>}{params.error && <p className="form-error">We couldn’t complete that request. Check your details and try again.</p>}<form action={signInWithPassword} className="auth-form"><input type="hidden" name="next" value={next} /><label>Email address<input required type="email" name="email" autoComplete="email" /></label><label>Password<input required minLength={8} type="password" name="password" autoComplete="current-password" /></label><button className="gold-button">Sign In</button></form><details className="create-account"><summary>Create a customer account</summary><form action={createAccount} className="auth-form"><input type="hidden" name="next" value={next} /><label>First name<input required name="firstName" autoComplete="given-name" /></label><label>Last name<input required name="lastName" autoComplete="family-name" /></label><label>Email address<input required type="email" name="email" autoComplete="email" /></label><label>Password<input required minLength={8} type="password" name="password" autoComplete="new-password" /></label><small>Use at least 8 characters.</small><button className="gold-button">Create Account</button></form></details><Link className="text-link" href="/catalog">← Return to catalog</Link></section></main>;
 }
