@@ -28,6 +28,7 @@ export function InquiryNotifier() {
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
   const [showOrderAlert, setShowOrderAlert] = useState(false);
   const [pushState, setPushState] = useState<"checking" | "available" | "enabled" | "blocked" | "unsupported" | "error">("checking");
+  const [pushError, setPushError] = useState("");
   const initialized = useRef(false);
   const latestId = useRef<string | null>(null);
   const latestOrderId = useRef<string | null>(null);
@@ -140,13 +141,17 @@ export function InquiryNotifier() {
       }
       const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
+      const configResponse = await fetch("/api/admin/push-subscription", { cache: "no-store" });
+      const config = await configResponse.json() as { publicKey?: string; error?: string };
+      if (!configResponse.ok || !config.publicKey) throw new Error(config.error || "Push key is unavailable");
       const subscription = existing || await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""),
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey),
       });
       await saveSubscription(subscription);
       setPushState("enabled");
-    } catch {
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : "Your phone could not register notifications");
       setPushState("error");
     }
   }
@@ -162,7 +167,7 @@ export function InquiryNotifier() {
     {pushState === "enabled" && <span style={{ background: "#dcebdc", color: "#173617", padding: "10px 12px", fontSize: 11, fontWeight: 700 }}>Phone notifications enabled</span>}
     {pushState === "blocked" && <span style={{ color: "#7f2f2f", fontSize: 11 }}>Notifications are blocked in this device’s settings.</span>}
     {pushState === "unsupported" && <span style={{ color: "#655f54", fontSize: 11 }}>Install this site to your Home Screen to enable notifications.</span>}
-    {pushState === "error" && <button type="button" onClick={enablePushNotifications} style={{ border: "1px solid #bdb5a7", background: "transparent", padding: "10px 12px", cursor: "pointer", fontSize: 11 }}>Retry phone notifications</button>}
+    {pushState === "error" && <div><button type="button" onClick={enablePushNotifications} style={{ border: "1px solid #bdb5a7", background: "transparent", padding: "10px 12px", cursor: "pointer", fontSize: 11 }}>Retry phone notifications</button>{pushError && <p style={{ margin: "7px 0 0", color: "#7f2f2f", fontSize: 11, maxWidth: 320 }}>{pushError}</p>}</div>}
     {showAlert && latest && <div role="status" style={{ background: "#10110f", color: "white", padding: "11px 14px", fontSize: 12, display: "flex", gap: 12, alignItems: "center" }}>
       <strong>New inquiry:</strong> {latest.first_name} {latest.last_name}{latest.subject ? ` — ${latest.subject}` : ""}
       <button type="button" onClick={() => setShowAlert(false)} style={{ border: 0, background: "transparent", color: "white", cursor: "pointer" }}>×</button>
