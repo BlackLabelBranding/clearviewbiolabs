@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { sendAdminPush } from "@/lib/push";
 
 type InquiryBody = {
   firstName?: string;
@@ -44,5 +45,11 @@ export async function POST(request: Request) {
   });
 
   if (error) return NextResponse.json({ error: "Inquiry could not be submitted" }, { status: 400 });
+  await sendAdminPush({
+    title: "New Clear View inquiry",
+    body: `${firstName}${body.lastName ? ` ${String(body.lastName).trim()}` : ""}${body.subject ? ` — ${String(body.subject).trim()}` : ""}`,
+    url: "/admin",
+    tag: `inquiry-${data?.[0]?.inquiry_id || Date.now()}`,
+  });
   return NextResponse.json({ ok: true, inquiryId: data?.[0]?.inquiry_id || null });
 }
