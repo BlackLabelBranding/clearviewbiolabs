@@ -7,6 +7,14 @@ type SubscriptionBody = {
   keys?: { p256dh?: string; auth?: string };
 };
 
+export async function GET() {
+  const context = await getAdminContext();
+  if (!context) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim();
+  if (!publicKey) return NextResponse.json({ error: "Push key is not configured" }, { status: 503 });
+  return NextResponse.json({ publicKey });
+}
+
 export async function POST(request: Request) {
   const context = await getAdminContext();
   if (!context) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
