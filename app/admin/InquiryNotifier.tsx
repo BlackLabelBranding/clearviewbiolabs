@@ -27,6 +27,7 @@ export function InquiryNotifier() {
   const [orderCount, setOrderCount] = useState(0);
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
   const [showOrderAlert, setShowOrderAlert] = useState(false);
+  const [pushState, setPushState] = useState<"checking" | "available" | "enabled" | "blocked" | "unsupported" | "error">("checking");
   const initialized = useRef(false);
   const latestId = useRef<string | null>(null);
   const latestOrderId = useRef<string | null>(null);
@@ -90,9 +91,46 @@ export function InquiryNotifier() {
     };
   }, []);
 
-  async function enableBrowserNotifications() {
-    if (typeof Notification === "undefined") return;
-    await Notification.requestPermission();
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || typeof Notification === "undefined") {
+      setPushState("unsupported");
+      return;
+    }
+    navigator.serviceWorker.register("/sw.js")
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => setPushState(subscription ? "enabled" : Notification.permission === "denied" ? "blocked" : "available"))
+      .catch(() => setPushState("error"));
+  }, []);
+
+  function urlBase64ToUint8Array(value: string) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    return Uint8Array.from(window.atob(base64), (character) => character.charCodeAt(0));
+  }
+
+  async function enablePushNotifications() {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState("blocked");
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      const subscription = existing || await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""),
+      });
+      const response = await fetch("/api/admin/push-subscription", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!response.ok) throw new Error("Subscription was not saved");
+      setPushState("enabled");
+    } catch {
+      setPushState("error");
+    }
   }
 
   return <div style={{ margin: "0 5vw 22px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -102,7 +140,11 @@ export function InquiryNotifier() {
     <a href="#orders" style={{ textDecoration: "none", background: "#e2ddd1", color: "#10110f", padding: "11px 14px", fontSize: 12, fontWeight: 700 }}>
       Orders • {orderCount}
     </a>
-    {typeof Notification !== "undefined" && Notification.permission === "default" && <button type="button" onClick={enableBrowserNotifications} style={{ border: "1px solid #bdb5a7", background: "transparent", padding: "10px 12px", cursor: "pointer", fontSize: 11 }}>Enable browser alerts</button>}
+    {pushState === "available" && <button type="button" onClick={enablePushNotifications} style={{ border: "1px solid #bdb5a7", background: "transparent", padding: "10px 12px", cursor: "pointer", fontSize: 11 }}>Enable phone notifications</button>}
+    {pushState === "enabled" && <span style={{ background: "#dcebdc", color: "#173617", padding: "10px 12px", fontSize: 11, fontWeight: 700 }}>Phone notifications enabled</span>}
+    {pushState === "blocked" && <span style={{ color: "#7f2f2f", fontSize: 11 }}>Notifications are blocked in this device’s settings.</span>}
+    {pushState === "unsupported" && <span style={{ color: "#655f54", fontSize: 11 }}>Install this site to your Home Screen to enable notifications.</span>}
+    {pushState === "error" && <button type="button" onClick={enablePushNotifications} style={{ border: "1px solid #bdb5a7", background: "transparent", padding: "10px 12px", cursor: "pointer", fontSize: 11 }}>Retry phone notifications</button>}
     {showAlert && latest && <div role="status" style={{ background: "#10110f", color: "white", padding: "11px 14px", fontSize: 12, display: "flex", gap: 12, alignItems: "center" }}>
       <strong>New inquiry:</strong> {latest.first_name} {latest.last_name}{latest.subject ? ` — ${latest.subject}` : ""}
       <button type="button" onClick={() => setShowAlert(false)} style={{ border: 0, background: "transparent", color: "white", cursor: "pointer" }}>×</button>
