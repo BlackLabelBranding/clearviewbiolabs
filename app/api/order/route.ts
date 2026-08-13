@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendOrderEmails } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
+import { sendAdminPush } from "@/lib/push";
 
 type OrderBody = {
   customer?: Record<string, unknown>;
@@ -81,6 +82,13 @@ export async function POST(request: Request) {
   } catch {
     // The order is already safely stored; email delivery can be retried by an admin.
   }
+
+  await sendAdminPush({
+    title: `New Clear View order ${created.order_number}`,
+    body: `${customerName} — ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(created.subtotal_cents / 100)}`,
+    url: "/admin",
+    tag: `order-${created.order_number}`,
+  });
 
   return NextResponse.json({
     orderNumber: created.order_number,
