@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { createPasscodeAdminClient } from "@/lib/admin";
+import { createSecretAdminClient } from "@/lib/admin";
 
 type PushPayload = {
   title: string;
@@ -12,7 +12,8 @@ function configured() {
   return Boolean(
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
     && process.env.VAPID_PRIVATE_KEY
-    && process.env.VAPID_SUBJECT,
+    && process.env.VAPID_SUBJECT
+    && process.env.SUPABASE_SECRET_KEY,
   );
 }
 
@@ -25,7 +26,7 @@ export async function sendAdminPush(payload: PushPayload) {
     process.env.VAPID_PRIVATE_KEY!,
   );
 
-  const supabase = createPasscodeAdminClient();
+  const supabase = createSecretAdminClient();
   const { data: subscriptions, error } = await supabase
     .from("clearview_push_subscriptions")
     .select("endpoint,p256dh,auth");
