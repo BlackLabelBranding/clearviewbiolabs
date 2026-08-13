@@ -96,16 +96,39 @@ export function InquiryNotifier() {
       setPushState("unsupported");
       return;
     }
-    navigator.serviceWorker.register("/sw.js")
-      .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setPushState(subscription ? "enabled" : Notification.permission === "denied" ? "blocked" : "available"))
-      .catch(() => setPushState("error"));
+    async function registerAndSync() {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          setPushState(Notification.permission === "denied" ? "blocked" : "available");
+          return;
+        }
+        await saveSubscription(subscription);
+        setPushState("enabled");
+      } catch {
+        setPushState("error");
+      }
+    }
+    registerAndSync();
   }, []);
 
   function urlBase64ToUint8Array(value: string) {
     const padding = "=".repeat((4 - value.length % 4) % 4);
     const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
     return Uint8Array.from(window.atob(base64), (character) => character.charCodeAt(0));
+  }
+
+  async function saveSubscription(subscription: PushSubscription) {
+    const response = await fetch("/api/admin/push-subscription", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(subscription.toJSON()),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(result.error || "Subscription was not saved");
+    }
   }
 
   async function enablePushNotifications() {
@@ -121,12 +144,7 @@ export function InquiryNotifier() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""),
       });
-      const response = await fetch("/api/admin/push-subscription", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      if (!response.ok) throw new Error("Subscription was not saved");
+      await saveSubscription(subscription);
       setPushState("enabled");
     } catch {
       setPushState("error");
