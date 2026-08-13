@@ -18,19 +18,14 @@ export async function hasAdminPasscode() {
   return cookieStore.get(ADMIN_PASSCODE_COOKIE)?.value === currentAdminPasscode();
 }
 
-export function createPasscodeAdminClient() {
+export function createSecretAdminClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    process.env.SUPABASE_SECRET_KEY!,
     {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
-      },
-      global: {
-        headers: {
-          "x-clearview-admin-passcode": currentAdminPasscode(),
-        },
       },
     },
   );
@@ -38,7 +33,7 @@ export function createPasscodeAdminClient() {
 
 export async function getAdminContext() {
   if (await hasAdminPasscode()) {
-    return { supabase: createPasscodeAdminClient(), mode: "passcode" as const };
+    return { supabase: createSecretAdminClient(), mode: "passcode" as const };
   }
 
   // Temporary compatibility path while the admin entry screen transitions
