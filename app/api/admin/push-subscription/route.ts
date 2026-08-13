@@ -46,3 +46,4 @@ export async function DELETE(request: Request) {
   if (error) return NextResponse.json({ error: "Subscription could not be removed" }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
