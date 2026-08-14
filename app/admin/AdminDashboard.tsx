@@ -64,6 +64,8 @@ type Analytics = {
   trafficSources: Array<{ source: string; visits: number }>;
 };
 type Tab = "overview" | "inquiries" | "orders" | "sales" | "analytics" | "products";
+type OrderFilter = "open" | "all" | string;
+type InquiryFilter = "active" | "all" | string;
 
 const orderStatuses = ["pending_payment", "paid", "processing", "shipped", "complete", "cancelled"];
 const inquiryStatuses = ["new", "contacted", "qualified", "converted", "closed", "spam"];
@@ -83,6 +85,11 @@ export function AdminDashboard() {
   const [products, setProducts] = useState<AdminProduct[]>(catalogProducts);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>("open");
+  const [inquiryFilter, setInquiryFilter] = useState<InquiryFilter>("active");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [inquirySearch, setInquirySearch] = useState("");
+  const [filtersReady, setFiltersReady] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -109,7 +116,59 @@ export function AdminDashboard() {
     }).catch(() => setError("The admin data could not be loaded."));
   }, []);
 
+  useEffect(() => {
+    const savedOrderFilter = window.localStorage.getItem("cvb-admin-order-filter");
+    const savedInquiryFilter = window.localStorage.getItem("cvb-admin-inquiry-filter");
+    if (savedOrderFilter) setOrderFilter(savedOrderFilter);
+    if (savedInquiryFilter) setInquiryFilter(savedInquiryFilter);
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (filtersReady) window.localStorage.setItem("cvb-admin-order-filter", orderFilter);
+  }, [filtersReady, orderFilter]);
+
+  useEffect(() => {
+    if (filtersReady) window.localStorage.setItem("cvb-admin-inquiry-filter", inquiryFilter);
+  }, [filtersReady, inquiryFilter]);
+
   const paidOrders = useMemo(() => orders.filter((order) => paidStatuses.has(order.status)), [orders]);
+  const filteredOrders = useMemo(() => {
+    const query = orderSearch.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesStatus = orderFilter === "all"
+        || (orderFilter === "open" && !["complete", "cancelled"].includes(order.status))
+        || order.status === orderFilter;
+      const matchesSearch = !query || [
+        order.order_number,
+        order.customer_name,
+        order.customer_email,
+        order.customer_phone,
+        order.institution || "",
+        order.tracking_number || "",
+      ].join(" ").toLowerCase().includes(query);
+      return matchesStatus && matchesSearch;
+    });
+  }, [orders, orderFilter, orderSearch]);
+  const filteredInquiries = useMemo(() => {
+    const query = inquirySearch.trim().toLowerCase();
+    return inquiries.filter((inquiry) => {
+      const matchesStatus = inquiryFilter === "all"
+        || (inquiryFilter === "active" && ["new", "contacted", "qualified"].includes(inquiry.status))
+        || inquiry.status === inquiryFilter;
+      const matchesSearch = !query || [
+        inquiry.first_name,
+        inquiry.last_name,
+        inquiry.email,
+        inquiry.phone,
+        inquiry.institution,
+        inquiry.product_name,
+        inquiry.subject,
+        inquiry.message,
+      ].join(" ").toLowerCase().includes(query);
+      return matchesStatus && matchesSearch;
+    });
+  }, [inquiries, inquiryFilter, inquirySearch]);
   const maxRevenue = Math.max(1, ...(analytics?.revenueByDay.map((day) => day.revenueCents) || [1]));
   const maxTraffic = Math.max(1, ...(analytics?.trafficSources.map((source) => source.visits) || [1]));
   const maxFunnel = Math.max(1, analytics?.eventCounts.page_view || 0, analytics?.summary.sessions90d || 0);
@@ -179,13 +238,23 @@ export function AdminDashboard() {
       </>}
 
       {tab === "inquiries" && <>
-        <div className={styles.heading}><div><h2>Inquiries</h2><p>Website leads and research-product questions.</p></div><span className={styles.badge}>{inquiries.filter((item) => item.status === "new").length} new</span></div>
-        <div className={styles.table}>{inquiries.map((inquiry) => <article className={styles.inquiry} key={inquiry.id}><div><small>{new Date(inquiry.created_at).toLocaleString()} • {inquiry.source}</small><h3>{inquiry.first_name} {inquiry.last_name}</h3><p>{inquiry.email}{inquiry.phone ? ` • ${inquiry.phone}` : ""}</p><p>{inquiry.institution}{inquiry.institution_type ? ` • ${inquiry.institution_type}` : ""}</p>{inquiry.product_name && <p><b>Product:</b> {inquiry.product_name}</p>}{inquiry.subject && <p><b>Subject:</b> {inquiry.subject}</p>}<p className={styles.message}>{inquiry.message}</p>{(inquiry.utm_source || inquiry.utm_campaign) && <p>Campaign: {inquiry.utm_source || "direct"} / {inquiry.utm_campaign || "—"}</p>}</div><div><span className={inquiry.status === "new" ? `${styles.badge} ${styles.badgeNew}` : styles.badge}>{label(inquiry.status)}</span></div><div className={styles.controls}><select value={inquiry.status} onChange={(e) => updateInquiryStatus(inquiry, e.target.value)}>{inquiryStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${inquiry.email}`}>Email lead</a>{inquiry.phone && <a href={`tel:${inquiry.phone}`}>Call lead</a>}</div></article>)}{!inquiries.length && <div className={styles.empty}>New website inquiries will appear here.</div>}</div>
+        <div id="inquiries" className={styles.heading}><div><h2>Inquiries</h2><p>Website leads and research-product questions.</p></div><span className={styles.badge}>{inquiries.filter((item) => item.status === "new").length} new</span></div>
+        <div className={styles.filters}>
+          <label><span>View</span><select value={inquiryFilter} onChange={(event) => setInquiryFilter(event.target.value)}><option value="active">Active inquiries</option><option value="all">All inquiries</option>{inquiryStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
+          <label className={styles.search}><span>Search</span><input type="search" value={inquirySearch} onChange={(event) => setInquirySearch(event.target.value)} placeholder="Name, email, subject, or message" /></label>
+          <span className={styles.resultCount}>{filteredInquiries.length} of {inquiries.length} shown</span>
+        </div>
+        <div className={styles.table}>{filteredInquiries.map((inquiry) => <article className={styles.inquiry} key={inquiry.id}><div><small>{new Date(inquiry.created_at).toLocaleString()} • {inquiry.source}</small><h3>{inquiry.first_name} {inquiry.last_name}</h3><p>{inquiry.email}{inquiry.phone ? ` • ${inquiry.phone}` : ""}</p><p>{inquiry.institution}{inquiry.institution_type ? ` • ${inquiry.institution_type}` : ""}</p>{inquiry.product_name && <p><b>Product:</b> {inquiry.product_name}</p>}{inquiry.subject && <p><b>Subject:</b> {inquiry.subject}</p>}<p className={styles.message}>{inquiry.message}</p>{(inquiry.utm_source || inquiry.utm_campaign) && <p>Campaign: {inquiry.utm_source || "direct"} / {inquiry.utm_campaign || "—"}</p>}</div><div><span className={inquiry.status === "new" ? `${styles.badge} ${styles.badgeNew}` : styles.badge}>{label(inquiry.status)}</span></div><div className={styles.controls}><select value={inquiry.status} onChange={(e) => updateInquiryStatus(inquiry, e.target.value)}>{inquiryStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${inquiry.email}`}>Email lead</a>{inquiry.phone && <a href={`tel:${inquiry.phone}`}>Call lead</a>}</div></article>)}{!filteredInquiries.length && <div className={styles.empty}>{inquiries.length ? "No inquiries match this view." : "New website inquiries will appear here."}</div>}</div>
       </>}
 
       {tab === "orders" && <>
-        <div className={styles.heading}><div><h2>Orders</h2><p>Manage payment, processing, and fulfillment status.</p></div><span className={styles.badge}>{orders.length} orders</span></div>
-        <div className={styles.table}>{orders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(order.subtotal_cents)}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div></article>)}{!orders.length && <div className={styles.empty}>New checkout requests will appear here.</div>}</div>
+        <div id="orders" className={styles.heading}><div><h2>Orders</h2><p>Manage payment, processing, and fulfillment status.</p></div><span className={styles.badge}>{orders.length} orders</span></div>
+        <div className={styles.filters}>
+          <label><span>View</span><select value={orderFilter} onChange={(event) => setOrderFilter(event.target.value)}><option value="open">Open orders</option><option value="all">All orders</option>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
+          <label className={styles.search}><span>Search</span><input type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Order number, customer, email, or tracking" /></label>
+          <span className={styles.resultCount}>{filteredOrders.length} of {orders.length} shown</span>
+        </div>
+        <div className={styles.table}>{filteredOrders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(order.subtotal_cents)}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div></article>)}{!filteredOrders.length && <div className={styles.empty}>{orders.length ? "No orders match this view." : "New checkout requests will appear here."}</div>}</div>
       </>}
 
       {tab === "sales" && <>
