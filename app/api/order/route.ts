@@ -3,7 +3,7 @@ import { sendOrderEmails } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
 import { sendAdminPush } from "@/lib/push";
 import { createSecretAdminClient } from "@/lib/admin";
-import { createPayramCheckout } from "@/lib/payram";
+import { createPayramCheckout, isPayramCheckoutConfigured } from "@/lib/payram";
 
 type OrderBody = {
   customer?: Record<string, unknown>;
@@ -21,6 +21,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Sign in before submitting your order.", login: "/login?next=/%23catalog" },
       { status: 401 },
+    );
+  }
+
+  if (!isPayramCheckoutConfigured()) {
+    return NextResponse.json(
+      { error: "Secure payment checkout is temporarily unavailable." },
+      { status: 503 },
     );
   }
 

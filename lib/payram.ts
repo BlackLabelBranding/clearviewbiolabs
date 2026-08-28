@@ -32,6 +32,19 @@ function configuredBaseUrl() {
   return url.toString().replace(/\/$/, "");
 }
 
+export function isPayramCheckoutConfigured() {
+  if (!process.env.PAYRAM_API_KEY?.trim() || !process.env.PAYRAM_WEBHOOK_SECRET?.trim()) {
+    return false;
+  }
+
+  try {
+    configuredBaseUrl();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function createPayramCheckout({
   customerEmail,
   orderNumber,
