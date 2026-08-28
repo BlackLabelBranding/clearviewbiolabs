@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSecretAdminClient } from "@/lib/admin";
-import { payramStatuses, verifyPayramWebhookKey } from "@/lib/payram";
+import {
+  type PayramStatus,
+  payramStatuses,
+  resolvePayramStatus,
+  verifyPayramWebhookKey,
+} from "@/lib/payram";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
   const admin = createSecretAdminClient();
   const { data: payment, error: lookupError } = await admin
     .from("clearview_payments")
-    .select("id,order_id,requested_amount_cents,status")
+    .select("id,order_id,requested_amount_cents,received_amount_cents,status,currency,chain,token,transaction_hash")
     .eq("reference_id", referenceId)
     .maybeSingle();
 
@@ -64,23 +69,33 @@ export async function POST(request: Request) {
       ?? event.amountInUSD
       ?? event.amount,
   );
-  const effectiveStatus = status === "FILLED"
+  const reportedStatus = status === "FILLED"
     && reportedAmountCents !== null
     && reportedAmountCents < payment.requested_amount_cents
     ? "PARTIALLY_FILLED"
-    : status;
-  const receivedAmountCents = reportedAmountCents
-    ?? (effectiveStatus === "FILLED" ? payment.requested_amount_cents : null);
+    : status as PayramStatus;
+  const effectiveStatus = resolvePayramStatus(payment.status, reportedStatus);
+  const receivedAmountCents = Math.max(
+    Number(payment.received_amount_cents || 0),
+    reportedAmountCents
+      ?? (effectiveStatus === "FILLED" ? payment.requested_amount_cents : 0),
+  ) || null;
+  const incomingCurrency = String(event.currency || "").trim().slice(0, 20);
+  const incomingChain = String(event.chain || "").trim().slice(0, 40);
+  const incomingToken = String(event.token || "").trim().slice(0, 40);
+  const incomingTransactionHash = String(
+    event.txHash || event.transaction_hash || "",
+  ).trim().slice(0, 255);
 
   const { error: paymentError } = await admin
     .from("clearview_payments")
     .update({
       status: effectiveStatus,
       received_amount_cents: receivedAmountCents,
-      currency: String(event.currency || "USD").slice(0, 20),
-      chain: String(event.chain || "").slice(0, 40) || null,
-      token: String(event.token || "").slice(0, 40) || null,
-      transaction_hash: String(event.txHash || event.transaction_hash || "").slice(0, 255) || null,
+      currency: incomingCurrency || payment.currency || "USD",
+      chain: incomingChain || payment.chain,
+      token: incomingToken || payment.token,
+      transaction_hash: incomingTransactionHash || payment.transaction_hash,
       last_webhook_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

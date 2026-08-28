@@ -20,6 +20,42 @@ export const payramStatuses = new Set([
   "UNDEFINED",
 ]);
 
+export type PayramStatus =
+  | "OPEN"
+  | "FILLED"
+  | "PARTIALLY_FILLED"
+  | "OVER_FILLED"
+  | "CANCELLED"
+  | "UNDEFINED";
+
+/**
+ * PayRam may retry webhooks or deliver them out of order. Never let a stale
+ * event move a settled payment back to an unpaid state.
+ */
+export function resolvePayramStatus(current: string, incoming: PayramStatus) {
+  const normalizedCurrent = current.toUpperCase() as PayramStatus;
+
+  if (normalizedCurrent === "OVER_FILLED") return normalizedCurrent;
+  if (normalizedCurrent === "FILLED") {
+    return incoming === "OVER_FILLED" ? incoming : normalizedCurrent;
+  }
+  if (normalizedCurrent === "CANCELLED") {
+    return incoming === "FILLED" || incoming === "OVER_FILLED"
+      ? incoming
+      : normalizedCurrent;
+  }
+  if (normalizedCurrent === "PARTIALLY_FILLED") {
+    return incoming === "OPEN" || incoming === "UNDEFINED"
+      ? normalizedCurrent
+      : incoming;
+  }
+  if (normalizedCurrent === "OPEN" && incoming === "UNDEFINED") {
+    return normalizedCurrent;
+  }
+
+  return incoming;
+}
+
 function configuredBaseUrl() {
   const raw = process.env.PAYRAM_BASE_URL?.trim();
   if (!raw) throw new Error("PAYRAM_NOT_CONFIGURED");
