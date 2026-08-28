@@ -11,6 +11,10 @@ export async function GET() {
     .order("name");
 
   if (error) {
+    console.error("Catalog query failed", {
+      code: error.code,
+      message: error.message,
+    });
     return NextResponse.json({ error: "Catalog unavailable" }, { status: 503 });
   }
 
