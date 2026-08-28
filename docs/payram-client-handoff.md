@@ -24,7 +24,7 @@ to the person or company that will control the receiving wallets.
 1. Create a project API key in the PayRam **Developers** area.
 2. Add and activate this webhook endpoint in PayRam:
 
-   `https://clearviewbiolabs.com/api/payram/webhook`
+   `https://www.clearviewbiolabs.com/api/payram/webhook`
 
 3. Configure a long, unique webhook API key/shared secret. PayRam must send it
    in the `API-Key` request header.
