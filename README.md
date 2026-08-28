@@ -7,6 +7,7 @@ Production Next.js storefront for Clear View Biolabs. Source is maintained in Gi
 - Next.js 16 App Router on Vercel
 - Supabase Auth with passwordless email sign-in
 - Supabase Postgres with row-level security
+- Self-hosted PayRam checkout for USDC and USDT
 - Resend for customer and administrator order notifications
 
 ## Local setup
@@ -30,6 +31,17 @@ Order email delivery also uses:
 - `ORDER_FROM_EMAIL`
 
 If the Resend variables are absent, orders are still stored safely and appear in the admin dashboard, but notification email is skipped.
+
+Stablecoin checkout also requires these server-only values:
+
+- `PAYRAM_BASE_URL` — the HTTPS origin of the self-hosted PayRam server
+- `PAYRAM_API_KEY` — a PayRam project API key
+- `PAYRAM_WEBHOOK_SECRET` — the shared secret configured on the PayRam webhook
+
+The webhook endpoint is `/api/payram/webhook`. Checkout fails closed when any
+PayRam setting is missing. Never prefix either secret with `NEXT_PUBLIC_` or
+commit it to this repository. See [the client handoff](docs/payram-client-handoff.md)
+before enabling production payments.
 
 ## Commands
 

@@ -15,6 +15,7 @@ type OrderEmail = {
   shippingAddress: string;
   subtotalCents: number;
   items: OrderEmailItem[];
+  checkoutUrl?: string;
 };
 
 function escapeHtml(value: string) {
@@ -41,15 +42,18 @@ function orderHtml(order: OrderEmail, customerCopy: boolean) {
       <td style="padding:10px;border-bottom:1px solid #ddd">${item.quantity}</td>
       <td style="padding:10px;border-bottom:1px solid #ddd;text-align:right">${money(item.unit_price_cents * item.quantity)}</td>
     </tr>`).join("");
+  const customerPayment = order.checkoutUrl
+    ? `<p>Your order is awaiting payment. Complete the secure USDC / USDT checkout below before fulfillment begins.</p>
+       <p style="margin:24px 0"><a href="${escapeHtml(order.checkoutUrl)}" style="display:inline-block;background:#c4a64b;color:#10110f;padding:14px 20px;text-decoration:none;font-weight:700">Continue to Secure Payment</a></p>`
+    : "<p>Your order was saved, but the payment checkout could not be created. The Clear View team will contact you before fulfillment begins.</p>";
+  const orderContact = `<p>${escapeHtml(order.customerName)} · ${escapeHtml(order.customerEmail)} · ${escapeHtml(order.customerPhone)}<br>${escapeHtml(order.shippingAddress)}</p>`;
 
   return `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17231d">
     <div style="max-width:640px;margin:auto;padding:28px">
       <p style="letter-spacing:.12em;color:#9b762d;font-weight:700">CLEAR VIEW BIOLABS</p>
       <h1>${customerCopy ? "Your order request was received." : "New research order request"}</h1>
       <p><strong>Order ${escapeHtml(order.orderNumber)}</strong></p>
-      <p>${customerCopy
-        ? "Payment and shipping instructions will follow separately. No card information was collected on the website."
-        : `${escapeHtml(order.customerName)} · ${escapeHtml(order.customerEmail)} · ${escapeHtml(order.customerPhone)}<br>${escapeHtml(order.shippingAddress)}`}</p>
+      ${customerCopy ? customerPayment : orderContact}
       <table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>
       <p style="font-size:18px;text-align:right"><strong>Subtotal: ${money(order.subtotalCents)}</strong></p>
       <p style="font-size:12px;color:#666">Strictly for lawful laboratory research. Not for human or animal use.</p>

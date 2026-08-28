@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { sendOrderEmails } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
 import { sendAdminPush } from "@/lib/push";
+import { createSecretAdminClient } from "@/lib/admin";
+import { createPayramCheckout, isPayramCheckoutConfigured } from "@/lib/payram";
 
 type OrderBody = {
   customer?: Record<string, unknown>;
@@ -19,6 +21,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Sign in before submitting your order.", login: "/login?next=/%23catalog" },
       { status: 401 },
+    );
+  }
+
+  if (!isPayramCheckoutConfigured()) {
+    return NextResponse.json(
+      { error: "Secure payment checkout is temporarily unavailable." },
+      { status: 503 },
     );
   }
 
@@ -68,6 +77,68 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .join(", ");
 
+  let checkout;
+  try {
+    checkout = await createPayramCheckout({
+      customerEmail: user.email,
+      orderNumber: created.order_number,
+      amountCents: created.subtotal_cents,
+    });
+
+    const admin = createSecretAdminClient();
+    const { error: paymentError } = await admin.from("clearview_payments").insert({
+      order_id: created.order_id,
+      user_id: user.id,
+      reference_id: checkout.referenceId,
+      checkout_url: checkout.checkoutUrl,
+      requested_amount_cents: created.subtotal_cents,
+      status: "OPEN",
+    });
+    if (paymentError) throw paymentError;
+
+    const { error: orderPaymentError } = await admin
+      .from("clearview_orders")
+      .update({
+        payment_method: "payram",
+        payment_reference: checkout.referenceId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", created.order_id)
+      .eq("user_id", user.id);
+    if (orderPaymentError) throw orderPaymentError;
+  } catch (error) {
+    console.error("PayRam checkout creation failed", {
+      orderNumber: created.order_number,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    try {
+      await sendOrderEmails({
+        orderNumber: created.order_number,
+        customerName,
+        customerEmail: user.email,
+        customerPhone: String(customer.phone || ""),
+        shippingAddress,
+        subtotalCents: created.subtotal_cents,
+        items: savedItems || [],
+      });
+      await sendAdminPush({
+        title: `Payment checkout failed for ${created.order_number}`,
+        body: `${customerName} — order saved, PayRam checkout needs attention`,
+        url: "/admin",
+        tag: `payram-failed-${created.order_number}`,
+      });
+    } catch {
+      // The order is stored and remains visible to the admin even if notifications fail.
+    }
+    return NextResponse.json(
+      {
+        error: "Your order was saved, but the payment checkout is temporarily unavailable.",
+        orderNumber: created.order_number,
+      },
+      { status: 502 },
+    );
+  }
+
   let emailConfigured = false;
   try {
     emailConfigured = await sendOrderEmails({
@@ -78,6 +149,7 @@ export async function POST(request: Request) {
       shippingAddress,
       subtotalCents: created.subtotal_cents,
       items: savedItems || [],
+      checkoutUrl: checkout.checkoutUrl,
     });
   } catch {
     // The order is already safely stored; email delivery can be retried by an admin.
@@ -94,5 +166,7 @@ export async function POST(request: Request) {
     orderNumber: created.order_number,
     subtotalCents: created.subtotal_cents,
     emailConfigured,
+    referenceId: checkout.referenceId,
+    checkoutUrl: checkout.checkoutUrl,
   });
 }
