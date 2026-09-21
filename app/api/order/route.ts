@@ -1,9 +1,9 @@
+import { isPayramCheckoutConfigured } from "@/lib/payram";
 import { NextResponse } from "next/server";
 import { sendOrderEmails } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
 import { sendAdminPush } from "@/lib/push";
-import { createSecretAdminClient } from "@/lib/admin";
-import { createPayramCheckout, isPayramCheckoutConfigured } from "@/lib/payram";
+import { paymentMethodColumns, type PaymentMethod } from "@/lib/payment-methods";
 
 type OrderBody = {
   customer?: Record<string, unknown>;
@@ -24,16 +24,18 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isPayramCheckoutConfigured()) {
-    return NextResponse.json(
-      { error: "Secure payment checkout is temporarily unavailable." },
-      { status: 503 },
-    );
+  const { data: methods, error: methodsError } = await supabase
+    .from("clearview_payment_methods").select(paymentMethodColumns)
+    .eq("enabled", true).order("sort_order").order("name");
+  const paymentMethods = (methods || []).filter((method) => method.id !== "payram" || isPayramCheckoutConfigured()) as PaymentMethod[];
+  if (methodsError || !paymentMethods.length) {
+    return NextResponse.json({ error: "Payment options are temporarily unavailable. Please contact Clear View before placing an order." }, { status: 503 });
   }
 
   let body: OrderBody;
   try {
     body = await request.json() as OrderBody;
+    if (!body || typeof body !== "object" || !Array.isArray(body.items) || body.items.some((item) => !item || typeof item !== "object")) throw new Error("Invalid order data");
   } catch {
     return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
   }
@@ -77,68 +79,6 @@ export async function POST(request: Request) {
     .filter(Boolean)
     .join(", ");
 
-  let checkout;
-  try {
-    checkout = await createPayramCheckout({
-      customerEmail: user.email,
-      orderNumber: created.order_number,
-      amountCents: created.subtotal_cents,
-    });
-
-    const admin = createSecretAdminClient();
-    const { error: paymentError } = await admin.from("clearview_payments").insert({
-      order_id: created.order_id,
-      user_id: user.id,
-      reference_id: checkout.referenceId,
-      checkout_url: checkout.checkoutUrl,
-      requested_amount_cents: created.subtotal_cents,
-      status: "OPEN",
-    });
-    if (paymentError) throw paymentError;
-
-    const { error: orderPaymentError } = await admin
-      .from("clearview_orders")
-      .update({
-        payment_method: "payram",
-        payment_reference: checkout.referenceId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", created.order_id)
-      .eq("user_id", user.id);
-    if (orderPaymentError) throw orderPaymentError;
-  } catch (error) {
-    console.error("PayRam checkout creation failed", {
-      orderNumber: created.order_number,
-      error: error instanceof Error ? error.message : "unknown",
-    });
-    try {
-      await sendOrderEmails({
-        orderNumber: created.order_number,
-        customerName,
-        customerEmail: user.email,
-        customerPhone: String(customer.phone || ""),
-        shippingAddress,
-        subtotalCents: created.subtotal_cents,
-        items: savedItems || [],
-      });
-      await sendAdminPush({
-        title: `Payment checkout failed for ${created.order_number}`,
-        body: `${customerName} — order saved, PayRam checkout needs attention`,
-        url: "/admin",
-        tag: `payram-failed-${created.order_number}`,
-      });
-    } catch {
-      // The order is stored and remains visible to the admin even if notifications fail.
-    }
-    return NextResponse.json(
-      {
-        error: "Your order was saved, but the payment checkout is temporarily unavailable.",
-        orderNumber: created.order_number,
-      },
-      { status: 502 },
-    );
-  }
-
   let emailConfigured = false;
   try {
     emailConfigured = await sendOrderEmails({
@@ -149,24 +89,25 @@ export async function POST(request: Request) {
       shippingAddress,
       subtotalCents: created.subtotal_cents,
       items: savedItems || [],
-      checkoutUrl: checkout.checkoutUrl,
+      paymentMethods,
     });
   } catch {
     // The order is already safely stored; email delivery can be retried by an admin.
   }
 
-  await sendAdminPush({
+  try { await sendAdminPush({
     title: `New Clear View order ${created.order_number}`,
     body: `${customerName} — ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(created.subtotal_cents / 100)}`,
     url: "/admin",
     tag: `order-${created.order_number}`,
-  });
+  }); } catch { /* A notification failure must never turn a saved order into a checkout failure. */ }
 
   return NextResponse.json({
+    orderId: String(created.order_id),
     orderNumber: created.order_number,
     subtotalCents: created.subtotal_cents,
     emailConfigured,
-    referenceId: checkout.referenceId,
-    checkoutUrl: checkout.checkoutUrl,
+    paymentMethods,
   });
 }
+
