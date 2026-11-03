@@ -10,10 +10,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const { data: order, error } = await supabase.from("clearview_orders")
-    .select("order_number,subtotal_cents,status,payment_method,payment_reference").eq("id", id).eq("user_id", user.id).maybeSingle();
+    .select("order_number,subtotal_cents,shipping_cents,total_cents,manual_payment_reported_at,status,payment_method,payment_reference").eq("id", id).eq("user_id", user.id).maybeSingle();
   if (error) return NextResponse.json({ error: "Order unavailable." }, { status: 500 });
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   if (order.status !== "pending_payment") return NextResponse.json({ error: "This order is no longer awaiting payment. Refresh your order history for its current status." }, { status: 409 });
+  if (order.manual_payment_reported_at) return NextResponse.json({ orderId: id, orderNumber: order.order_number,
+    subtotalCents: order.subtotal_cents, shippingCents: order.shipping_cents, totalCents: order.total_cents,
+    manualPaymentReported: true, reportedPaymentMethod: order.payment_method, paymentMethods: [] }, { headers: { "Cache-Control": "no-store" } });
   if (order.payment_method?.startsWith("stripe")) {
     if (order.payment_method === "stripe" && order.payment_reference?.startsWith("cs_")) {
       try {
@@ -22,13 +25,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           await settleStripeSession(session);
           return NextResponse.json({ error: "Payment received. Refresh your order history." }, { status: 409 });
         }
-        return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents,
+        return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, shippingCents: order.shipping_cents, totalCents: order.total_cents,
           paymentMethods: [], checkoutProvider: "stripe", checkoutUrl: stripeCheckoutUrl(session.url) ? session.url : undefined,
           cardCheckoutReserved: true }, { headers: { "Cache-Control": "no-store" } });
       } catch { return NextResponse.json({ error: "Your card payment needs review. Please try again before sending another payment." }, { status: 503 }); }
     }
     // A timed-out creation can safely resume the same reserved Stripe attempt.
-    return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents,
+    return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, shippingCents: order.shipping_cents, totalCents: order.total_cents,
       paymentMethods: [{ id: "stripe", name: "Resume card checkout", payment_tag: "", payment_url: "", instructions: "Resume your existing card-payment attempt before choosing another payment method.", enabled: true, sort_order: 0 }], checkoutProvider: "stripe" }, { headers: { "Cache-Control": "no-store" } });
   }
   // Do not offer a second payment method for an existing PayRam invoice.
@@ -37,11 +40,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (paymentError) return NextResponse.json({ error: "Payment details unavailable." }, { status: 500 });
   if (payment) {
     if (!["OPEN", "PARTIALLY_FILLED"].includes(payment.status)) return NextResponse.json({ error: "Your payment is being reviewed. Please contact Clear View before sending another payment." }, { status: 409 });
-    return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, paymentMethods: [], checkoutUrl: payment.checkout_url }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, shippingCents: order.shipping_cents, totalCents: order.total_cents, paymentMethods: [], checkoutUrl: payment.checkout_url }, { headers: { "Cache-Control": "no-store" } });
   }
   if (order.payment_method?.startsWith("payram")) return NextResponse.json({ error: "Contact Clear View for this order's payment details." }, { status: 409 });
   const { data: methods, error: methodsError } = await supabase.from("clearview_payment_methods")
     .select(paymentMethodColumns).eq("enabled", true).order("sort_order").order("name");
   if (methodsError) return NextResponse.json({ error: "Payment instructions unavailable. Please try again." }, { status: 503 });
-  return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, paymentMethods: methods.filter((method) => (method.id !== "payram" || isPayramCheckoutConfigured()) && (method.id !== "stripe" || isStripeCheckoutConfigured())) }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, shippingCents: order.shipping_cents, totalCents: order.total_cents, paymentMethods: methods.filter((method) => (method.id !== "payram" || isPayramCheckoutConfigured()) && (method.id !== "stripe" || isStripeCheckoutConfigured())) }, { headers: { "Cache-Control": "no-store" } });
 }

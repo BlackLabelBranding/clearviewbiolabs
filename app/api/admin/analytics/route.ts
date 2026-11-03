@@ -1,3 +1,4 @@
+import { orderTotalCents } from "@/lib/order-pricing";
 import { NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
 
@@ -28,7 +29,7 @@ export async function GET() {
 
   const since = new Date(Date.now() - 90 * 86400000).toISOString();
   const [ordersResult, itemsResult, inquiriesResult, eventsResult] = await Promise.all([
-    context.supabase.from("clearview_orders").select("id,order_number,customer_email,subtotal_cents,paid_amount_cents,status,created_at,paid_at").order("created_at", { ascending: false }).limit(1000),
+    context.supabase.from("clearview_orders").select("id,order_number,customer_email,subtotal_cents,shipping_cents,total_cents,manual_payment_reported_at,paid_amount_cents,status,created_at,paid_at").order("created_at", { ascending: false }).limit(1000),
     context.supabase.from("clearview_order_items").select("order_id,product_name,variant,unit_price_cents,quantity").limit(5000),
     context.supabase.from("clearview_inquiries").select("id,status,created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(1000),
     context.supabase.from("clearview_events").select("event_type,session_id,page,source,metadata,created_at").gte("created_at", since).order("created_at", { ascending: false }).limit(10000),
@@ -47,7 +48,7 @@ export async function GET() {
   const todayStart = startOfDay(new Date());
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
 
-  const revenue = (list: typeof orders) => list.reduce((sum, order) => sum + Number(order.paid_amount_cents ?? order.subtotal_cents ?? 0), 0);
+  const revenue = (list: typeof orders) => list.reduce((sum, order) => sum + Number(order.paid_amount_cents ?? orderTotalCents(order)), 0);
   const todayPaid = paidOrders.filter((order) => new Date(order.paid_at || order.created_at).getTime() >= todayStart);
   const monthPaid = paidOrders.filter((order) => new Date(order.paid_at || order.created_at).getTime() >= monthStart);
   const uniqueCustomers = new Set(paidOrders.map((order) => order.customer_email.toLowerCase())).size;
@@ -73,7 +74,7 @@ export async function GET() {
     const day = dayMap.get(key);
     if (day) {
       day.orders += 1;
-      day.revenueCents += Number(order.paid_amount_cents ?? order.subtotal_cents ?? 0);
+      day.revenueCents += Number(order.paid_amount_cents ?? orderTotalCents(order));
     }
   }
 

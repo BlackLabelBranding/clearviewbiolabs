@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       }))
     : [];
 
-  const { data, error } = await supabase.rpc("clearview_create_order", {
+  const { data, error } = await supabase.rpc("clearview_create_order_with_shipping", {
     p_customer: customer,
     p_researcher: researcher,
     p_items: items,
@@ -89,6 +89,7 @@ export async function POST(request: Request) {
       customerPhone: String(customer.phone || ""),
       shippingAddress,
       subtotalCents: created.subtotal_cents,
+      shippingCents: created.shipping_cents, totalCents: created.total_cents,
       items: savedItems || [],
       paymentMethods,
     });
@@ -97,8 +98,8 @@ export async function POST(request: Request) {
   }
 
   try { await sendAdminPush({
-    title: `New Clear View order ${created.order_number}`,
-    body: `${customerName} — ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(created.subtotal_cents / 100)}`,
+    title: `Awaiting payment — Clear View order ${created.order_number}`,
+    body: `${customerName} — ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(created.total_cents / 100)}`,
     url: "/admin",
     tag: `order-${created.order_number}`,
   }); } catch { /* A notification failure must never turn a saved order into a checkout failure. */ }
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
     orderId: String(created.order_id),
     orderNumber: created.order_number,
     subtotalCents: created.subtotal_cents,
+    shippingCents: created.shipping_cents, totalCents: created.total_cents,
     emailConfigured,
     paymentMethods,
   });

@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("clearview_orders")
-    .select("id,order_number,subtotal_cents,status,created_at")
+    .select("id,order_number,subtotal_cents,shipping_cents,total_cents,manual_payment_reported_at,status,payment_method,created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 

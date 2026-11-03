@@ -1,5 +1,6 @@
 "use client";
 
+import { orderTotalCents, paymentLabel } from "@/lib/order-pricing";
 import Image from "next/image";
 import { OrderDetails } from "./OrderDetails";
 import { PaymentMethods } from "./PaymentMethods";
@@ -18,6 +19,9 @@ type Order = {
   institution?: string;
   institution_type?: string;
   subtotal_cents: number;
+  shipping_cents?: number;
+  total_cents?: number;
+  manual_payment_reported_at?: string | null;
   paid_amount_cents?: number | null;
   status: string;
   payment_method?: string | null;
@@ -140,7 +144,8 @@ export function AdminDashboard() {
     return orders.filter((order) => {
       const matchesStatus = orderFilter === "all"
         || (orderFilter === "open" && !["complete", "cancelled"].includes(order.status))
-        || order.status === orderFilter;
+        || order.status === orderFilter
+        || (orderFilter === "payment_reported" && order.status === "pending_payment" && Boolean(order.manual_payment_reported_at));
       const matchesSearch = !query || [
         order.order_number,
         order.customer_name,
@@ -181,6 +186,7 @@ export function AdminDashboard() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    if (!response.ok) { const result = await response.json(); setSaved(result.error || "Could not update order."); return; }
     if (response.ok) {
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
       const analyticsResponse = await fetch("/api/admin/analytics");
@@ -251,13 +257,13 @@ export function AdminDashboard() {
       </>}
 
       {tab === "orders" && <>
-        <div id="orders" className={styles.heading}><div><h2>Orders</h2><p>Manage payment, processing, and fulfillment status.</p></div><span className={styles.badge}>{orders.length} orders</span></div>
+        <div id="orders" className={styles.heading}><div><h2>Orders</h2><p>Pending orders are saved checkouts, not confirmed sales. Verify payment before processing or fulfillment.</p></div><span className={styles.badge}>{orders.length} orders</span></div>
         <div className={styles.filters}>
-          <label><span>View</span><select value={orderFilter} onChange={(event) => setOrderFilter(event.target.value)}><option value="open">Open orders</option><option value="all">All orders</option>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
+          <label><span>View</span><select value={orderFilter} onChange={(event) => setOrderFilter(event.target.value)}><option value="open">Open orders</option><option value="all">All orders</option><option value="payment_reported">Manual payments to verify</option>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
           <label className={styles.search}><span>Search</span><input type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Order number, customer, email, or tracking" /></label>
           <span className={styles.resultCount}>{filteredOrders.length} of {orders.length} shown</span>
         </div>
-        <div className={styles.table}>{filteredOrders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.payment_method?.startsWith("payram") && <p><b>Payment:</b> {order.payment_method === "payram_starting" ? "PayRam checkout needs review" : "PayRam"}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(order.subtotal_cents)}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div><OrderDetails order={order} /></article>)}{!filteredOrders.length && <div className={styles.empty}>{orders.length ? "No orders match this view." : "New checkout requests will appear here."}</div>}</div>
+        <div className={styles.table}>{filteredOrders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p><b>{paymentLabel(order)}</b></p><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.payment_method?.startsWith("payram") && <p><b>Payment:</b> {order.payment_method === "payram_starting" ? "PayRam checkout needs review" : "PayRam"}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(orderTotalCents(order))}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div><OrderDetails order={order} /></article>)}{!filteredOrders.length && <div className={styles.empty}>{orders.length ? "No orders match this view." : "New checkout requests will appear here."}</div>}</div>
       </>}
 
       {tab === "sales" && <>
@@ -268,7 +274,7 @@ export function AdminDashboard() {
           <Metric title="Paid orders" value={String(analytics?.summary.paidOrders || 0)} note="All time" />
           <Metric title="Average order" value={money(analytics?.summary.averageOrderCents)} note="Paid orders" />
         </div>
-        <div className={styles.twoCol}><div className={styles.section}><small>Product performance</small><h3>Top sellers</h3><div className={styles.list}>{analytics?.topProducts.map((product) => <div className={styles.row} key={product.name}><div><strong>{product.name}</strong><span>{product.units} units</span></div><strong>{money(product.revenueCents)}</strong></div>)}</div></div><div className={styles.section}><small>Recent revenue</small><h3>Paid orders</h3><div className={styles.list}>{paidOrders.slice(0, 12).map((order) => <div className={styles.row} key={order.id}><div><strong>{order.order_number}</strong><span>{order.customer_name} • {new Date(order.paid_at || order.created_at).toLocaleDateString()}</span></div><strong>{money(order.paid_amount_cents ?? order.subtotal_cents)}</strong></div>)}</div></div></div>
+        <div className={styles.twoCol}><div className={styles.section}><small>Product performance</small><h3>Top sellers</h3><div className={styles.list}>{analytics?.topProducts.map((product) => <div className={styles.row} key={product.name}><div><strong>{product.name}</strong><span>{product.units} units</span></div><strong>{money(product.revenueCents)}</strong></div>)}</div></div><div className={styles.section}><small>Recent revenue</small><h3>Paid orders</h3><div className={styles.list}>{paidOrders.slice(0, 12).map((order) => <div className={styles.row} key={order.id}><div><strong>{order.order_number}</strong><span>{order.customer_name} • {new Date(order.paid_at || order.created_at).toLocaleDateString()}</span></div><strong>{money(order.paid_amount_cents ?? orderTotalCents(order))}</strong></div>)}</div></div></div>
       </>}
 
       {tab === "analytics" && <>

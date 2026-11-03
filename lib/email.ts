@@ -15,6 +15,8 @@ type OrderEmail = {
   customerPhone: string;
   shippingAddress: string;
   subtotalCents: number;
+  shippingCents?: number;
+  totalCents?: number;
   items: OrderEmailItem[];
   checkoutUrl?: string;
   paymentMethods?: PaymentMethod[];
@@ -45,14 +47,14 @@ function orderHtml(order: OrderEmail, customerCopy: boolean) {
       <td style="padding:10px;border-bottom:1px solid #ddd;text-align:right">${money(item.unit_price_cents * item.quantity)}</td>
     </tr>`).join("");
   const manualPayment = order.paymentMethods?.length
-    ? `<p>Your order is awaiting payment. Pay <strong>${money(order.subtotalCents)}</strong> using ONE of the methods below. Include order <strong>${escapeHtml(order.orderNumber)}</strong> in your payment note.</p>
+    ? `<p>Your order is awaiting payment. Pay <strong>${money(order.totalCents ?? order.subtotalCents + (order.shippingCents ?? 0))}</strong> using ONE of the methods below. Include order <strong>${escapeHtml(order.orderNumber)}</strong> in your payment note.</p>
        ${order.paymentMethods.map((method) => `<h3>${escapeHtml(method.name)}</h3>
          ${method.id !== "stripe" && method.payment_tag ? `<p>Pay to: <strong>${escapeHtml(method.payment_tag)}</strong></p>` : ""}
          ${method.id === "stripe" ? `<p><a href="https://www.clearviewbiolabs.com/account">Open your account to pay this order by card</a></p>` : ""}
          ${method.id === "payram" ? `<p><a href="https://www.clearviewbiolabs.com/account">Open your account to start secure PayRam payment</a></p>` : ""}
          <p>${escapeHtml(method.instructions).replaceAll("\n", "<br>")}</p>
          ${method.payment_url && safePaymentUrl(method.payment_url) ? `<p><a href="${escapeHtml(method.payment_url)}">Open ${escapeHtml(method.name)}</a></p>` : ""}`).join("")}
-       <p><strong>Once payment is received, we will confirm shipment.</strong> Shipping is confirmed separately.</p>
+       <p><strong>Once payment is received, we will confirm shipment.</strong> Shipping is included in the order total.</p>
        <p><a href="https://www.clearviewbiolabs.com/account">View your order and payment instructions</a></p>`
     : "";
   const customerPayment = manualPayment || (order.checkoutUrl
@@ -68,7 +70,8 @@ function orderHtml(order: OrderEmail, customerCopy: boolean) {
       <p><strong>Order ${escapeHtml(order.orderNumber)}</strong></p>
       ${customerCopy ? customerPayment : orderContact}
       <table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>
-      <p style="font-size:18px;text-align:right"><strong>Order total: ${money(order.subtotalCents)}</strong></p>
+      <p style="text-align:right">Items: ${money(order.subtotalCents)}<br>Shipping: ${money(order.shippingCents ?? 0)}</p>
+      <p style="font-size:18px;text-align:right"><strong>Order total: ${money(order.totalCents ?? order.subtotalCents + (order.shippingCents ?? 0))}</strong></p>
       <p style="font-size:12px;color:#666">Strictly for lawful laboratory research. Not for human or animal use.</p>
     </div>
   </body></html>`;

@@ -1,3 +1,4 @@
+import { orderTotalCents } from "@/lib/order-pricing";
 import { NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
 
@@ -37,10 +38,20 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const { error } = await admin.supabase
+  const { data: order, error: lookupError } = await admin.supabase.from("clearview_orders")
+    .select("status,subtotal_cents,shipping_cents,total_cents,paid_at,paid_amount_cents").eq("id", id).maybeSingle();
+  if (lookupError) return NextResponse.json({ error: "Order unavailable" }, { status: 500 });
+  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  const paidStatuses = ["paid", "processing", "shipped", "complete"];
+  if (["processing", "shipped", "complete"].includes(body.status) && !paidStatuses.includes(order.status)) {
+    return NextResponse.json({ error: "Verify receipt and mark this order paid before fulfillment." }, { status: 409 });
+  }
+  const { data: updated, error } = await admin.supabase
     .from("clearview_orders")
-    .update({ status: body.status, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .update({ status: body.status, updated_at: new Date().toISOString(),
+      ...(body.status === "paid" && !paidStatuses.includes(order.status) ? { paid_at: new Date().toISOString(), paid_amount_cents: orderTotalCents(order) } : {}) })
+    .eq("id", id).eq("status", order.status).select("id").maybeSingle();
+  if (!error && !updated) return NextResponse.json({ error: "Order changed. Refresh and try again." }, { status: 409 });
 
   if (error) return NextResponse.json({ error: "Update failed" }, { status: 500 });
   return NextResponse.json({ ok: true });

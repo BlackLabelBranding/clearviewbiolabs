@@ -12,7 +12,7 @@ async function ownedOrder(id: string) {
   const { data: { user } } = await db.auth.getUser();
   if (!user?.email) return { response: reply({ error: "Sign in to pay for your order." }, 401) };
   const { data: order, error } = await db.from("clearview_orders")
-    .select("id,user_id,order_number,customer_email,subtotal_cents,status,payment_method,payment_reference,updated_at")
+    .select("id,user_id,order_number,customer_email,subtotal_cents,shipping_cents,total_cents,manual_payment_reported_at,status,payment_method,payment_reference,updated_at")
     .eq("id", id).eq("user_id", user.id).maybeSingle();
   if (error || !order) return { response: reply({ error: "Order not found." }, 404) };
   if (order.status !== "pending_payment") return { response: reply({ error: "This order is no longer awaiting payment. Refresh your order history." }, 409) };
@@ -61,6 +61,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       client_reference_id: String(order.id),
       metadata: { integration: "clearview", order_id: String(order.id), user_id: order.user_id, attempt: attempt! },
       line_items: items.map((item) => ({ quantity: item.quantity, price_data: { currency: "usd", unit_amount: item.unit_price_cents, product_data: { name: item.product_name, ...(item.variant ? { description: item.variant } : {}) } } })),
+      ...(order.shipping_cents > 0 ? { shipping_options: [{ shipping_rate_data: { type: "fixed_amount" as const, fixed_amount: { amount: order.shipping_cents, currency: "usd" }, display_name: "Flat-rate shipping" } }] } : {}),
       success_url: `https://www.clearviewbiolabs.com/account?stripe=success&order=${order.id}`,
       cancel_url: `https://www.clearviewbiolabs.com/account?stripe=cancelled&order=${order.id}`,
     }, { idempotencyKey: attempt! });

@@ -1,3 +1,4 @@
+import { orderTotalCents } from "@/lib/order-pricing";
 import Stripe from "stripe";
 import { createSecretAdminClient } from "@/lib/admin";
 
@@ -25,7 +26,7 @@ export async function settleStripeSession(session: Stripe.Checkout.Session) {
   if (!id || !/^\d+$/.test(id) || !attempt || !/^stripe_attempt_[a-f0-9-]+$/.test(attempt)) throw new Error("Invalid order metadata");
   const admin = createSecretAdminClient();
   const { data: order, error } = await admin.from("clearview_orders")
-    .select("id,user_id,subtotal_cents,status,payment_method,payment_reference")
+    .select("id,user_id,subtotal_cents,shipping_cents,total_cents,manual_payment_reported_at,status,payment_method,payment_reference")
     .eq("id", id).maybeSingle();
   if (error || !order) throw new Error("Order lookup failed");
   if (order.user_id !== session.metadata.user_id || ![attempt, session.id].includes(order.payment_reference)) {
@@ -33,7 +34,7 @@ export async function settleStripeSession(session: Stripe.Checkout.Session) {
     throw new Error("Payment reference mismatch");
   }
   if (session.payment_status !== "paid") return;
-  if (session.currency !== "usd" || session.amount_total !== order.subtotal_cents || session.mode !== "payment") throw new Error("Payment amount mismatch");
+  if (session.currency !== "usd" || session.amount_total !== orderTotalCents(order) || session.mode !== "payment") throw new Error("Payment amount mismatch");
   if (["paid", "processing", "shipped", "complete"].includes(order.status)) return;
   if (order.status !== "pending_payment" || !["stripe", "stripe_starting"].includes(order.payment_method)) {
     console.error("Stripe payment needs manual review", { sessionId: session.id });

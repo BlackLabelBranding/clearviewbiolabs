@@ -1,5 +1,6 @@
 "use client";
 
+import { orderTotalCents, paymentLabel } from "@/lib/order-pricing";
 import { useEffect, useState } from "react";
 import styles from "./AdminDashboard.module.css";
 
@@ -7,6 +8,9 @@ type OrderSummary = {
   id: string;
   order_number: string;
   subtotal_cents: number;
+  shipping_cents?: number;
+  total_cents?: number;
+  manual_payment_reported_at?: string | null;
   paid_amount_cents?: number | null;
   status: string;
   payment_method?: string | null;
@@ -37,7 +41,11 @@ export function OrderDetails({ order }: { order: OrderSummary }) {
       <h4>Items purchased</h4>
       <OrderItems orderId={order.id} />
       <dl className={styles.detailFacts}>
-        <div><dt>Order subtotal</dt><dd>{money(order.subtotal_cents)}</dd></div>
+        <div><dt>Items subtotal</dt><dd>{money(order.subtotal_cents)}</dd></div>
+        <div><dt>Shipping</dt><dd>{money(order.shipping_cents ?? 0)}</dd></div>
+        <div><dt>Order total</dt><dd>{money(orderTotalCents(order))}</dd></div>
+        <div><dt>Payment progress</dt><dd>{paymentLabel(order)}</dd></div>
+        {order.manual_payment_reported_at && <div><dt>Customer reported payment</dt><dd>{new Date(order.manual_payment_reported_at).toLocaleString()} — verify receipt before marking paid</dd></div>}
         {order.paid_amount_cents != null && <div><dt>Amount paid</dt><dd>{money(order.paid_amount_cents)}</dd></div>}
         <div><dt>Status</dt><dd>{label(order.status)}</dd></div>
         <div><dt>Payment method</dt><dd>{order.payment_method ? label(order.payment_method) : "Not recorded"}</dd></div>

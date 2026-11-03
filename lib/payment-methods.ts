@@ -12,6 +12,10 @@ export type PaymentOrder = {
   orderId: string;
   orderNumber: string;
   subtotalCents: number;
+  shippingCents?: number;
+  totalCents?: number;
+  manualPaymentReported?: boolean;
+  reportedPaymentMethod?: string;
   paymentMethods: PaymentMethod[];
   checkoutUrl?: string;
   checkoutProvider?: "payram" | "stripe";
