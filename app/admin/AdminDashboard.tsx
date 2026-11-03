@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { OrderDetails } from "./OrderDetails";
 import { PaymentMethods } from "./PaymentMethods";
 import { useEffect, useMemo, useState } from "react";
 import { catalogProducts, Product } from "../catalog-data";
@@ -256,7 +257,7 @@ export function AdminDashboard() {
           <label className={styles.search}><span>Search</span><input type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Order number, customer, email, or tracking" /></label>
           <span className={styles.resultCount}>{filteredOrders.length} of {orders.length} shown</span>
         </div>
-        <div className={styles.table}>{filteredOrders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.payment_method?.startsWith("payram") && <p><b>Payment:</b> {order.payment_method === "payram_starting" ? "PayRam checkout needs review" : "PayRam"}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(order.subtotal_cents)}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div></article>)}{!filteredOrders.length && <div className={styles.empty}>{orders.length ? "No orders match this view." : "New checkout requests will appear here."}</div>}</div>
+        <div className={styles.table}>{filteredOrders.map((order) => <article className={styles.order} key={order.id}><div><small>{order.order_number} • {new Date(order.created_at).toLocaleString()}</small><h3>{order.customer_name}</h3><p>{order.customer_email} • {order.customer_phone}</p><p>{order.shipping_address}</p>{order.institution && <p>{order.institution} • {order.institution_type}</p>}{order.payment_method?.startsWith("payram") && <p><b>Payment:</b> {order.payment_method === "payram_starting" ? "PayRam checkout needs review" : "PayRam"}</p>}{order.tracking_number && <p><b>Tracking:</b> {order.tracking_number}</p>}</div><div><span className={styles.money}>{money(order.subtotal_cents)}</span><p>{order.paid_at ? `Paid ${new Date(order.paid_at).toLocaleDateString()}` : "Payment pending"}</p></div><div className={styles.controls}><select value={order.status} onChange={(e) => updateOrderStatus(order, e.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select><a href={`mailto:${order.customer_email}`}>Email customer</a></div><OrderDetails order={order} /></article>)}{!filteredOrders.length && <div className={styles.empty}>{orders.length ? "No orders match this view." : "New checkout requests will appear here."}</div>}</div>
       </>}
 
       {tab === "sales" && <>
