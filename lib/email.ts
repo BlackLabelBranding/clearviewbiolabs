@@ -47,7 +47,8 @@ function orderHtml(order: OrderEmail, customerCopy: boolean) {
   const manualPayment = order.paymentMethods?.length
     ? `<p>Your order is awaiting payment. Pay <strong>${money(order.subtotalCents)}</strong> using ONE of the methods below. Include order <strong>${escapeHtml(order.orderNumber)}</strong> in your payment note.</p>
        ${order.paymentMethods.map((method) => `<h3>${escapeHtml(method.name)}</h3>
-         ${method.payment_tag ? `<p>Pay to: <strong>${escapeHtml(method.payment_tag)}</strong></p>` : ""}
+         ${method.id !== "stripe" && method.payment_tag ? `<p>Pay to: <strong>${escapeHtml(method.payment_tag)}</strong></p>` : ""}
+         ${method.id === "stripe" ? `<p><a href="https://www.clearviewbiolabs.com/account">Open your account to pay this order by card</a></p>` : ""}
          ${method.id === "payram" ? `<p><a href="https://www.clearviewbiolabs.com/account">Open your account to start secure PayRam payment</a></p>` : ""}
          <p>${escapeHtml(method.instructions).replaceAll("\n", "<br>")}</p>
          ${method.payment_url && safePaymentUrl(method.payment_url) ? `<p><a href="${escapeHtml(method.payment_url)}">Open ${escapeHtml(method.name)}</a></p>` : ""}`).join("")}

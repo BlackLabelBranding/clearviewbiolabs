@@ -1,3 +1,4 @@
+import { isStripeCheckoutConfigured } from "@/lib/stripe";
 import { isPayramCheckoutConfigured } from "@/lib/payram";
 import { NextResponse } from "next/server";
 import { sendOrderEmails } from "@/lib/email";
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   const { data: methods, error: methodsError } = await supabase
     .from("clearview_payment_methods").select(paymentMethodColumns)
     .eq("enabled", true).order("sort_order").order("name");
-  const paymentMethods = (methods || []).filter((method) => method.id !== "payram" || isPayramCheckoutConfigured()) as PaymentMethod[];
+  const paymentMethods = (methods || []).filter((method) => (method.id !== "payram" || isPayramCheckoutConfigured()) && (method.id !== "stripe" || isStripeCheckoutConfigured())) as PaymentMethod[];
   if (methodsError || !paymentMethods.length) {
     return NextResponse.json({ error: "Payment options are temporarily unavailable. Please contact Clear View before placing an order." }, { status: 503 });
   }

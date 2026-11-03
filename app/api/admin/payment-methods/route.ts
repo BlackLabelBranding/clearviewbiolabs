@@ -1,3 +1,4 @@
+import { isStripeCheckoutConfigured } from "@/lib/stripe";
 import { isPayramCheckoutConfigured } from "@/lib/payram";
 import { NextResponse } from "next/server";
 import { createSecretAdminClient, getAdminContext } from "@/lib/admin";
@@ -17,6 +18,7 @@ export async function PUT(request: Request) {
   try { method = validatePaymentMethod(await request.json()); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid payment method." }, { status: 400 }); }
   if (method.id === "payram" && method.enabled && !isPayramCheckoutConfigured()) return NextResponse.json({ error: "PayRam cannot be enabled until its checkout connection is configured." }, { status: 400 });
+  if (method.id === "stripe" && method.enabled && !isStripeCheckoutConfigured()) return NextResponse.json({ error: "Stripe needs both STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in Vercel before enabling card checkout." }, { status: 400 });
   const { data, error } = await createSecretAdminClient().from("clearview_payment_methods")
     .upsert({ ...method, updated_at: new Date().toISOString() }, { onConflict: "id" })
     .select(paymentMethodColumns).single();

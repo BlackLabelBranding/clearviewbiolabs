@@ -1,3 +1,4 @@
+import { isStripeCheckoutConfigured, getStripe, stripeCheckoutUrl, settleStripeSession } from "@/lib/stripe";
 import { isPayramCheckoutConfigured } from "@/lib/payram";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -9,10 +10,27 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await context.params;
   const { data: order, error } = await supabase.from("clearview_orders")
-    .select("order_number,subtotal_cents,status,payment_method").eq("id", id).eq("user_id", user.id).maybeSingle();
+    .select("order_number,subtotal_cents,status,payment_method,payment_reference").eq("id", id).eq("user_id", user.id).maybeSingle();
   if (error) return NextResponse.json({ error: "Order unavailable." }, { status: 500 });
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   if (order.status !== "pending_payment") return NextResponse.json({ error: "This order is no longer awaiting payment. Refresh your order history for its current status." }, { status: 409 });
+  if (order.payment_method?.startsWith("stripe")) {
+    if (order.payment_method === "stripe" && order.payment_reference?.startsWith("cs_")) {
+      try {
+        const session = await getStripe().checkout.sessions.retrieve(order.payment_reference);
+        if (session.payment_status === "paid") {
+          await settleStripeSession(session);
+          return NextResponse.json({ error: "Payment received. Refresh your order history." }, { status: 409 });
+        }
+        return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents,
+          paymentMethods: [], checkoutProvider: "stripe", checkoutUrl: stripeCheckoutUrl(session.url) ? session.url : undefined,
+          cardCheckoutReserved: true }, { headers: { "Cache-Control": "no-store" } });
+      } catch { return NextResponse.json({ error: "Your card payment needs review. Please try again before sending another payment." }, { status: 503 }); }
+    }
+    // A timed-out creation can safely resume the same reserved Stripe attempt.
+    return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents,
+      paymentMethods: [{ id: "stripe", name: "Resume card checkout", payment_tag: "", payment_url: "", instructions: "Resume your existing card-payment attempt before choosing another payment method.", enabled: true, sort_order: 0 }], checkoutProvider: "stripe" }, { headers: { "Cache-Control": "no-store" } });
+  }
   // Do not offer a second payment method for an existing PayRam invoice.
   const { data: payment, error: paymentError } = await supabase.from("clearview_payments")
     .select("checkout_url,status").eq("order_id", id).eq("user_id", user.id).maybeSingle();
@@ -25,5 +43,5 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { data: methods, error: methodsError } = await supabase.from("clearview_payment_methods")
     .select(paymentMethodColumns).eq("enabled", true).order("sort_order").order("name");
   if (methodsError) return NextResponse.json({ error: "Payment instructions unavailable. Please try again." }, { status: 503 });
-  return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, paymentMethods: methods.filter((method) => method.id !== "payram" || isPayramCheckoutConfigured()) }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ orderId: id, orderNumber: order.order_number, subtotalCents: order.subtotal_cents, paymentMethods: methods.filter((method) => (method.id !== "payram" || isPayramCheckoutConfigured()) && (method.id !== "stripe" || isStripeCheckoutConfigured())) }, { headers: { "Cache-Control": "no-store" } });
 }

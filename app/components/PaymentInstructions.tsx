@@ -8,6 +8,10 @@ import styles from "./PaymentInstructions.module.css";
 export function PaymentInstructions({ order, onClose }: { order: PaymentOrder; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [checkoutUrl, setCheckoutUrl] = useState(order.checkoutUrl);
+  const [provider, setProvider] = useState(order.checkoutProvider || "payram");
+  const [cardReserved, setCardReserved] = useState(Boolean(order.cardCheckoutReserved));
+  const [methods, setMethods] = useState(order.paymentMethods);
+  const [startingStripe, setStartingStripe] = useState(false);
   const [startingPayram, setStartingPayram] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentLocked, setPaymentLocked] = useState(false);
@@ -37,6 +41,27 @@ export function PaymentInstructions({ order, onClose }: { order: PaymentOrder; o
       setPaymentError(error instanceof Error ? error.message : "Could not load PayRam. Check your account before sending payment.");
     } finally { setStartingPayram(false); }
   }
+  async function cardPayment(cancel = false) {
+    setStartingStripe(true); setPaymentError("");
+    try {
+      const response = await fetch(`/api/account/orders/${encodeURIComponent(order.orderId)}/stripe`, { method: cancel ? "DELETE" : "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Card checkout unavailable.");
+      if (cancel) {
+        const refreshed = await fetch(`/api/account/orders/${encodeURIComponent(order.orderId)}/payment`, { cache: "no-store" });
+        const payment = await refreshed.json();
+        if (!refreshed.ok) throw new Error(payment.error || "Could not refresh payment options.");
+        setCheckoutUrl(undefined); setCardReserved(false); setPaymentLocked(false); setMethods(payment.paymentMethods); setProvider("payram");
+      } else {
+        if (!safePaymentUrl(data.checkoutUrl) || new URL(data.checkoutUrl).origin !== "https://checkout.stripe.com") throw new Error("Invalid card checkout link.");
+        setProvider("stripe"); setCheckoutUrl(data.checkoutUrl); setCardReserved(true); setPaymentLocked(false);
+        window.location.assign(data.checkoutUrl);
+      }
+    } catch (error) {
+      setPaymentLocked(true);
+      setPaymentError(error instanceof Error ? error.message : "Card checkout unavailable. Reopen your order before sending another payment.");
+    } finally { setStartingStripe(false); }
+  }
   return <dialog ref={dialog} className={styles.dialog} aria-labelledby="payment-title" onCancel={onClose} onClose={onClose}>
     <button type="button" className={styles.close} onClick={onClose} aria-label="Close payment instructions">×</button>
     <p className={styles.eyebrow}>ORDER PLACED · AWAITING PAYMENT</p>
@@ -46,21 +71,23 @@ export function PaymentInstructions({ order, onClose }: { order: PaymentOrder; o
       <div><span>Order number</span><strong>{order.orderNumber}</strong><button type="button" onClick={() => copy(order.orderNumber)}>Copy order number</button></div>
       <div><span>Order total (USD)</span><strong className={styles.total}>{total}</strong></div>
     </div>
-    {!checkoutUrl && !paymentLocked && !startingPayram && <ol className={styles.steps}>
-      <li>Choose <strong>one</strong> payment method and send <strong>{total}</strong> to the recipient shown.</li>
+    {!checkoutUrl && !cardReserved && !paymentLocked && !startingPayram && !startingStripe && <ol className={styles.steps}>
+      <li>For manual payments, send <strong>{total}</strong> to the recipient shown.</li>
       <li>Include <strong>{order.orderNumber}</strong> in the payment note or reference so we can match your payment.</li>
       <li>Once payment is received, we will confirm shipment.</li>
     </ol>}
-    {checkoutUrl && safePaymentUrl(checkoutUrl) ? <section className={styles.method}><h3>Existing secure checkout</h3><p>This order already has a PayRam payment request. Use that checkout to finish payment.</p><a href={checkoutUrl} target="_blank" rel="noopener noreferrer">Open secure payment ↗</a></section> : !paymentLocked && !startingPayram && order.paymentMethods.map((method) => <section key={method.id} className={styles.method}>
+    {checkoutUrl && safePaymentUrl(checkoutUrl) ? <section className={styles.method}><h3>{provider === "stripe" ? "Pay by card" : "Existing secure checkout"}</h3><p>This order already has a {provider === "stripe" ? "Stripe" : "PayRam"} payment request. Use that checkout to finish payment.</p><a href={checkoutUrl} target="_blank" rel="noopener noreferrer">Open secure payment ↗</a>{provider === "stripe" && <button type="button" disabled={startingStripe} onClick={() => cardPayment(true)}>Use another payment method</button>}</section> : cardReserved ? <section className={styles.method}><p>Your card checkout has ended. Release it before choosing another payment method.</p><button type="button" disabled={startingStripe} onClick={() => cardPayment(true)}>Use another payment method</button></section> : !paymentLocked && !startingPayram && !startingStripe && methods.map((method) => <section key={method.id} className={styles.method}>
       <h3>{method.name}</h3>
-      {method.payment_tag && <div className={styles.recipient}><div><small>PAY TO</small><strong>{method.payment_tag}</strong></div><button type="button" onClick={() => copy(method.payment_tag)}>Copy recipient</button></div>}
+      {method.id !== "stripe" && method.payment_tag && <div className={styles.recipient}><div><small>PAY TO</small><strong>{method.payment_tag}</strong></div><button type="button" onClick={() => copy(method.payment_tag)}>Copy recipient</button></div>}
       <p className={styles.instructions}>{method.instructions}</p>
+      {method.id === "stripe" && <button type="button" disabled={startingStripe} onClick={() => cardPayment()}>{startingStripe ? "Opening Stripe…" : "Pay by card"}</button>}
       {method.id === "payram" && <button type="button" disabled={startingPayram} onClick={startPayram}>{startingPayram ? "Preparing secure checkout…" : "Pay with USDC / USDT"}</button>}
       {method.payment_url && safePaymentUrl(method.payment_url) && <a href={method.payment_url} target="_blank" rel="noopener noreferrer">Open {method.name} ↗</a>}
     </section>)}
+    {startingStripe && <p role="status">Updating your card checkout… Please wait before sending payment.</p>}
     {startingPayram && <p role="status">Preparing secure checkout… Please wait before sending any payment.</p>}
     {paymentError && <p role="alert">{paymentError}</p>}
-    {!order.paymentMethods.length && !checkoutUrl && <p role="status">Payment instructions are temporarily unavailable. Contact <a href="mailto:Marc@Clearviewbiolabs.com">Marc@Clearviewbiolabs.com</a> with your order number before sending payment.</p>}
+    {!methods.length && !checkoutUrl && !cardReserved && <p role="status">Payment instructions are temporarily unavailable. Contact <a href="mailto:Marc@Clearviewbiolabs.com">Marc@Clearviewbiolabs.com</a> with your order number before sending payment.</p>}
     <p className={styles.confirmation}>Once payment is received, we will confirm shipment.</p>
     <p className={styles.note}>Shipping is confirmed separately. Placing an order does not confirm payment. You can reopen these instructions from your account.</p>
     <p role="status" aria-live="polite">{copyMessage}</p>

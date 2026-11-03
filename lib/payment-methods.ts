@@ -14,6 +14,8 @@ export type PaymentOrder = {
   subtotalCents: number;
   paymentMethods: PaymentMethod[];
   checkoutUrl?: string;
+  checkoutProvider?: "payram" | "stripe";
+  cardCheckoutReserved?: boolean;
 };
 
 export const paymentMethodColumns = "id,name,payment_tag,payment_url,instructions,enabled,sort_order";
@@ -41,7 +43,7 @@ export function validatePaymentMethod(value: unknown): PaymentMethod {
   if (!/^[a-z0-9-]+$/.test(method.id) || !method.name) throw new Error("A name and valid identifier are required.");
   if (typeof method.enabled !== "boolean" || !Number.isInteger(method.sort_order) || method.sort_order < 0 || method.sort_order > 9999) throw new Error("Invalid availability or display order.");
   if (method.payment_url && !safePaymentUrl(method.payment_url)) throw new Error("Payment links must use HTTPS and cannot contain login credentials.");
-  if (method.enabled && (!method.instructions || (method.id !== "payram" && !method.payment_tag && !method.payment_url))) throw new Error("Enabled methods need payment instructions and a recipient tag or payment link.");
+  if (method.enabled && (!method.instructions || (!["payram", "stripe"].includes(method.id) && !method.payment_tag && !method.payment_url))) throw new Error("Enabled methods need payment instructions and a recipient tag or payment link.");
   if (method.enabled && (method.id === "bitpay" || /bitpay/i.test(method.name)) && !method.payment_url) throw new Error("BitPay needs a customer payment or invoice link before it can be enabled.");
   return method;
 }

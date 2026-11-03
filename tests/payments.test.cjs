@@ -27,7 +27,7 @@ function database(responses = {}, user = { id: 'owner', email: 'customer@example
   return db;
 }
 function deps(db, overrides = {}) {
-  return { 'next/server': { NextResponse: Response }, '@/lib/supabase/server': { createClient: async () => db }, '@/lib/admin': { createSecretAdminClient: () => db, getAdminContext: async () => ({ supabase: db }) }, '@/lib/payment-methods': methodsLib, '@/lib/payram': { isPayramCheckoutConfigured: () => true, createPayramCheckout: async () => ({ referenceId: 'invoice', checkoutUrl: 'https://pay.example.test/invoice' }) }, '@/lib/email': { sendOrderEmails: async () => false }, '@/lib/push': { sendAdminPush: async () => undefined }, ...overrides };
+  return { '@/lib/stripe': { isStripeCheckoutConfigured: () => false }, 'next/server': { NextResponse: Response }, '@/lib/supabase/server': { createClient: async () => db }, '@/lib/admin': { createSecretAdminClient: () => db, getAdminContext: async () => ({ supabase: db }) }, '@/lib/payment-methods': methodsLib, '@/lib/payram': { isPayramCheckoutConfigured: () => true, createPayramCheckout: async () => ({ referenceId: 'invoice', checkoutUrl: 'https://pay.example.test/invoice' }) }, '@/lib/email': { sendOrderEmails: async () => false }, '@/lib/push': { sendAdminPush: async () => undefined }, ...overrides };
 }
 const context = { params: Promise.resolve({ id: '23' }) };
 const post = (body = {}) => new Request('https://example.test/api/order', { method: 'POST', body: JSON.stringify(body) });
